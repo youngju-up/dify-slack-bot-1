@@ -1,0 +1,25 @@
+# Core dependencies
+Flask
+slack_bolt
+requests
+python-dotenv
+
+# Async support
+aiohttp
+asyncio
+
+# Utilities
+python-dateutil
+pytz
+
+# Logging
+colorlog
+
+# Testing (optional)
+pytest
+pytest-asyncio
+pytest-mock
+
+# Production server (optional)
+gunicorn
+gevent
