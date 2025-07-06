@@ -68,7 +68,7 @@ See `.env.example` for all required configuration:
 - `SLACK_BOT_TOKEN`: Your Slack bot user OAuth token (starts with xoxb-)
 - `SLACK_SIGNING_SECRET`: Your Slack app's signing secret
 - `DIFY_API_KEY`: Your Dify application API key
-- `DIFY_BASE_URL`: Dify API base URL (default: http://agents.algolyzerlab.com/v1)
+- `DIFY_BASE_URL`: Dify API base URL (default: https://dify.com/v1)
 - `FLASK_PORT`: Port for the Flask server (default: 3000)
 - `RESPONSE_MODE`: Response mode for Dify API (blocking/streaming, default: blocking)
 - `LOG_LEVEL`: Logging level (DEBUG/INFO/WARNING/ERROR, default: INFO)
