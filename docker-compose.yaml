@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  dify-slack-bot:
+    build: .
+    container_name: dify-slack-bot
+    restart: unless-stopped
+    ports:
+      - "${FLASK_PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      - FLASK_PORT=3000
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - bot-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import requests; requests.get('http://localhost:3000/health').raise_for_status()" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  bot-network:
+    driver: bridge
