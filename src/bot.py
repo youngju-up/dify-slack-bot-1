@@ -5,6 +5,7 @@ from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
 from flask import Flask, request, jsonify
 import requests
+import time
 from typing import Dict, Any, Optional
 from .config import Config
 from .dify_client import DifyClient
@@ -64,9 +65,13 @@ class SlackBot:
             if event.get('bot_id') or event.get('edited'):
                 return
 
-            # Only process if it's a DM or the bot is mentioned
+            # Skip if the bot is mentioned (handled by app_mention event)
+            if self._is_bot_mentioned(event):
+                return
+
+            # Only process if it's a DM
             channel_type = event.get('channel_type')
-            if channel_type == 'im' or self._is_bot_mentioned(event):
+            if channel_type == 'im':
                 logger.info(f"Received message: {event}")
                 self._process_message(event, say, client)
 
@@ -93,12 +98,13 @@ class SlackBot:
                 say("I need some text or files to work with!", thread_ts=thread_ts)
                 return
 
-            # Send typing indicator
-            client.chat_postEphemeral(
-                channel=channel,
-                user=user_id,
-                text="Thinking... 🤔"
-            )
+            # Send typing indicator (only for blocking mode)
+            if Config.RESPONSE_MODE == "blocking":
+                client.chat_postEphemeral(
+                    channel=channel,
+                    user=user_id,
+                    text="Thinking... 🤔"
+                )
 
             # Get or create conversation ID
             conversation_id = conversation_cache.get(user_id, channel, thread_ts)
@@ -128,27 +134,69 @@ class SlackBot:
                     logger.error(f"Error processing file: {e}")
 
             # Send message to Dify
-            response = self.dify.send_message(
-                user_id=user_id,
-                message=text,
-                conversation_id=conversation_id,
-                files=files if files else None
-            )
+            if Config.RESPONSE_MODE == "streaming":
+                # Send initial message
+                initial_response = say("🤔 Thinking...", thread_ts=thread_ts)
+                message_ts = initial_response['ts']
+                
+                last_update_time = 0
+                update_interval = 1.0  # Update every 1 second to avoid rate limits
+
+                # Create update callback for real-time updates
+                def update_callback(text, is_final=False):
+                    nonlocal last_update_time
+                    try:
+                        current_time = time.time()
+                        
+                        if is_final:
+                            # Final update - remove typing indicator
+                            client.chat_update(
+                                channel=channel,
+                                ts=message_ts,
+                                text=truncate_text(text)
+                            )
+                        elif current_time - last_update_time >= update_interval:
+                            # Intermediate update - show progress (throttled)
+                            client.chat_update(
+                                channel=channel,
+                                ts=message_ts,
+                                text=truncate_text(text) + " ⏳"
+                            )
+                            last_update_time = current_time
+                    except Exception as e:
+                        logger.error(f"Error updating message: {e}")
+
+                response = self.dify.send_message(
+                    user_id=user_id,
+                    message=text,
+                    conversation_id=conversation_id,
+                    files=files if files else None,
+                    update_callback=update_callback
+                )
+            else:
+                # Blocking mode - send typing indicator and wait for complete response
+                response = self.dify.send_message(
+                    user_id=user_id,
+                    message=text,
+                    conversation_id=conversation_id,
+                    files=files if files else None
+                )
 
             # Cache conversation ID
             new_conversation_id = response.get('conversation_id')
             if new_conversation_id:
                 conversation_cache.set(user_id, channel, new_conversation_id, thread_ts)
 
-            # Format and send response
-            formatted_response = format_dify_response(response)
-            formatted_response = truncate_text(formatted_response)
+            # Format and send response (only for blocking mode)
+            if Config.RESPONSE_MODE == "blocking":
+                formatted_response = format_dify_response(response)
+                formatted_response = truncate_text(formatted_response)
 
-            # Send response in thread
-            say(formatted_response, thread_ts=thread_ts)
+                # Send response in thread
+                say(formatted_response, thread_ts=thread_ts)
 
-            # Add suggested questions if available
-            if response.get('message_id'):
+            # Add suggested questions if available (only for blocking mode)
+            if Config.RESPONSE_MODE == "blocking" and response.get('message_id'):
                 suggestions = self.dify.get_suggested_questions(
                     response['message_id'],
                     user_id

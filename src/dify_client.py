@@ -23,7 +23,8 @@ class DifyClient:
             message: str,
             conversation_id: Optional[str] = None,
             files: Optional[List[Dict[str, Any]]] = None,
-            inputs: Optional[Dict[str, Any]] = None
+            inputs: Optional[Dict[str, Any]] = None,
+            update_callback: Optional[callable] = None
     ) -> Dict[str, Any]:
         """
         Send a message to Dify API.
@@ -34,6 +35,7 @@ class DifyClient:
             conversation_id: Optional conversation ID for context
             files: Optional list of files to include
             inputs: Optional input parameters
+            update_callback: Optional callback function for real-time updates (text, is_final)
 
         Returns:
             API response dictionary
@@ -58,7 +60,7 @@ class DifyClient:
             logger.debug(f"Sending message to Dify: {data}")
 
             if Config.RESPONSE_MODE == "streaming":
-                return self._handle_streaming_response(url, data)
+                return self._handle_streaming_response(url, data, update_callback)
             else:
                 return self._handle_blocking_response(url, data)
 
@@ -87,8 +89,8 @@ class DifyClient:
 
         return response.json()
 
-    def _handle_streaming_response(self, url: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle streaming mode response."""
+    def _handle_streaming_response(self, url: str, data: Dict[str, Any], update_callback=None) -> Dict[str, Any]:
+        """Handle streaming mode response with optional real-time updates."""
         response = requests.post(
             url,
             headers=self.headers,
@@ -110,20 +112,29 @@ class DifyClient:
         for line in response.iter_lines():
             if line:
                 line_str = line.decode('utf-8')
-                data = parse_streaming_response(line_str)
+                parsed_data = parse_streaming_response(line_str)
 
-                if data:
-                    event = data.get('event')
+                if parsed_data:
+                    event = parsed_data.get('event')
 
                     if event == 'message':
-                        full_answer += data.get('answer', '')
+                        chunk = parsed_data.get('answer', '')
+                        full_answer += chunk
+                        
+                        # Call update callback if provided for real-time updates
+                        if update_callback:
+                            update_callback(full_answer, is_final=False)
+                        
                         if not conversation_id:
-                            conversation_id = data.get('conversation_id')
+                            conversation_id = parsed_data.get('conversation_id')
                         if not message_id:
-                            message_id = data.get('message_id')
+                            message_id = parsed_data.get('message_id')
 
                     elif event == 'message_end':
-                        metadata = data.get('metadata', {})
+                        metadata = parsed_data.get('metadata', {})
+                        # Final update
+                        if update_callback:
+                            update_callback(full_answer, is_final=True)
                         break
 
         return {
