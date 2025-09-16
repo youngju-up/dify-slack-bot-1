@@ -163,6 +163,9 @@ class SlackBot:
                             logger.debug(f"Upload response: {upload_response}")
                 except Exception as e:
                     logger.error(f"Error processing file {file_info['name']}: {e}")
+                    logger.error(f"Exception type: {type(e).__name__}")
+                    import traceback
+                    logger.error(f"Traceback: {traceback.format_exc()}")
                     # Continue processing other files even if one fails
 
             # Notify user about unsupported files
@@ -253,6 +256,9 @@ class SlackBot:
 
         except Exception as e:
             logger.error(f"Error processing message: {e}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             error_message = build_error_message(e)
             say(error_message, thread_ts=thread_ts)
 

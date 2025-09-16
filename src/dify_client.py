@@ -82,6 +82,9 @@ class DifyClient:
             raise Exception("Connection error")
         except Exception as e:
             logger.error(f"Error sending message: {e}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise
 
     def _handle_blocking_response(self, url: str, data: Dict[str, Any]) -> Dict[str, Any]:
