@@ -61,7 +61,13 @@ class DifyClient:
             
             # Log file information for debugging
             if files:
-                logger.info(f"Files being sent: {[{'type': f['type'], 'url': f['url'][:50] + '...' if len(f['url']) > 50 else f['url']} for f in files]}")
+                file_info = []
+                for f in files:
+                    if 'upload_file_id' in f:
+                        file_info.append({'type': f['type'], 'upload_file_id': f['upload_file_id'][:20] + '...' if len(f['upload_file_id']) > 20 else f['upload_file_id']})
+                    elif 'url' in f:
+                        file_info.append({'type': f['type'], 'url': f['url'][:50] + '...' if len(f['url']) > 50 else f['url']})
+                logger.info(f"Files being sent: {file_info}")
 
             if Config.RESPONSE_MODE == "streaming":
                 return self._handle_streaming_response(url, data, update_callback)
