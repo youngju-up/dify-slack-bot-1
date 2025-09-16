@@ -190,12 +190,16 @@ class DifyClient:
                 logger.debug(f"Response headers: {dict(response.headers)}")
                 logger.debug(f"Response body: {response.text[:500]}...")
                 
-                if response.status_code == 200:
+                # Log success for 201 status
+                if response.status_code == 201:
+                    logger.info(f"File created successfully (201) - {filename}")
+                
+                if response.status_code in [200, 201]:  # 201 = Created
                     logger.info(f"File upload successful using endpoint: {url}")
                     result = response.json()
                     
                     # Extract file URL from response
-                    file_url = result.get('url') or result.get('file_url') or result.get('download_url')
+                    file_url = result.get('url') or result.get('file_url') or result.get('download_url') or result.get('preview_url')
                     if file_url:
                         return {
                             'url': file_url,
@@ -203,8 +207,20 @@ class DifyClient:
                             'original_response': result
                         }
                     else:
-                        logger.warning(f"No file URL found in response: {result}")
-                        return result
+                        # If no URL found, try to construct one from the file ID
+                        file_id = result.get('id')
+                        if file_id:
+                            # Try to construct a download URL
+                            constructed_url = f"{self.base_url}/files/{file_id}/download"
+                            logger.info(f"Constructed file URL: {constructed_url}")
+                            return {
+                                'url': constructed_url,
+                                'type': self._get_file_type_from_filename(filename),
+                                'original_response': result
+                            }
+                        else:
+                            logger.warning(f"No file URL or ID found in response: {result}")
+                            return result
                         
                 elif response.status_code != 404:  # Don't try next endpoint for 404
                     last_error = response
@@ -222,7 +238,7 @@ class DifyClient:
             raise Exception("All file upload endpoints failed")
 
         # Handle the final error
-        if response.status_code != 200:
+        if response.status_code not in [200, 201]:
             error_detail = response.text
             logger.error(f"File upload error: {response.status_code} - {error_detail}")
             

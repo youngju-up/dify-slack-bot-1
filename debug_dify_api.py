@@ -102,18 +102,26 @@ def check_dify_api():
             )
             
             print(f"   {endpoint}: {response.status_code}")
-            if response.status_code == 200:
+            if response.status_code in [200, 201]:  # 201 = Created
                 print("   ✅ File upload successful!")
                 result = response.json()
                 print(f"   Response: {result}")
                 
                 # Extract file URL
-                file_url = result.get('url') or result.get('file_url') or result.get('download_url')
+                file_url = result.get('url') or result.get('file_url') or result.get('download_url') or result.get('preview_url')
                 if file_url:
                     print(f"   File URL: {file_url}")
                     break
                 else:
-                    print("   ⚠️ No file URL found in response")
+                    # Try to construct URL from file ID
+                    file_id = result.get('id')
+                    if file_id:
+                        constructed_url = f"{dify_base_url}/files/{file_id}/download"
+                        print(f"   Constructed File URL: {constructed_url}")
+                        file_url = constructed_url
+                        break
+                    else:
+                        print("   ⚠️ No file URL or ID found in response")
             else:
                 print(f"   ❌ Upload failed: {response.text}")
         except Exception as e:
