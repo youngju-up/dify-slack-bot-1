@@ -143,16 +143,23 @@ class SlackBot:
                             user_id
                         )
 
-                        # Add to files list for message using remote_url method
-                        if 'url' in upload_response:
+                        # Add to files list for message using local_file method
+                        if 'id' in upload_response:
+                            # Use the file type from upload response, fallback to MIME type mapping
+                            file_type = upload_response.get('type')
+                            if not file_type:
+                                file_type = self._get_file_type(file_info['mimetype'])
+                            
+                            logger.debug(f"File type for {file_info['name']}: {file_type} (mimetype: {file_info['mimetype']})")
+                            
                             files.append({
-                                "type": upload_response.get('type', self._get_file_type(file_info['mimetype'])),
-                                "transfer_method": "remote_url",
-                                "url": upload_response['url']
+                                "type": file_type,
+                                "transfer_method": "local_file",
+                                "upload_file_id": upload_response['id']
                             })
-                            logger.info(f"✅ File ready for message: {file_info['name']} -> {upload_response['url']}")
+                            logger.info(f"✅ File ready for message: {file_info['name']} ({file_type}) -> ID: {upload_response['id']}")
                         else:
-                            logger.error(f"❌ No URL returned for file: {file_info['name']}")
+                            logger.error(f"❌ No file ID returned for file: {file_info['name']}")
                             logger.debug(f"Upload response: {upload_response}")
                 except Exception as e:
                     logger.error(f"Error processing file {file_info['name']}: {e}")

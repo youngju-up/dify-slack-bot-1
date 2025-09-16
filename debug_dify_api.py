@@ -107,21 +107,14 @@ def check_dify_api():
                 result = response.json()
                 print(f"   Response: {result}")
                 
-                # Extract file URL
-                file_url = result.get('url') or result.get('file_url') or result.get('download_url') or result.get('preview_url')
-                if file_url:
-                    print(f"   File URL: {file_url}")
+                # Extract file ID (for local_file method)
+                file_id = result.get('id')
+                if file_id:
+                    print(f"   File ID: {file_id}")
+                    file_url = file_id  # Use ID for local_file method
                     break
                 else:
-                    # Try to construct URL from file ID
-                    file_id = result.get('id')
-                    if file_id:
-                        constructed_url = f"{dify_base_url}/files/{file_id}/download"
-                        print(f"   Constructed File URL: {constructed_url}")
-                        file_url = constructed_url
-                        break
-                    else:
-                        print("   ⚠️ No file URL or ID found in response")
+                    print("   ⚠️ No file ID found in response")
             else:
                 print(f"   ❌ Upload failed: {response.text}")
         except Exception as e:
@@ -142,9 +135,9 @@ def check_dify_api():
             "user": "test_user",
             "files": [
                 {
-                    "type": "document",
-                    "transfer_method": "remote_url",
-                    "url": file_url
+                    "type": "image",
+                    "transfer_method": "local_file",
+                    "upload_file_id": file_url
                 }
             ]
         }

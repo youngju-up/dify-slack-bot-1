@@ -58,6 +58,10 @@ class DifyClient:
 
         try:
             logger.debug(f"Sending message to Dify: {data}")
+            
+            # Log file information for debugging
+            if files:
+                logger.info(f"Files being sent: {[{'type': f['type'], 'url': f['url'][:50] + '...' if len(f['url']) > 50 else f['url']} for f in files]}")
 
             if Config.RESPONSE_MODE == "streaming":
                 return self._handle_streaming_response(url, data, update_callback)
@@ -84,7 +88,17 @@ class DifyClient:
         )
 
         if response.status_code != 200:
-            logger.error(f"API error: {response.status_code} - {response.text}")
+            error_detail = response.text
+            logger.error(f"API error: {response.status_code} - {error_detail}")
+            
+            # Provide more specific error messages
+            if response.status_code == 400:
+                try:
+                    error_data = response.json()
+                    if 'message' in error_data:
+                        raise Exception(f"API error: {error_data['message']}")
+                except:
+                    pass
             raise Exception(f"API error: {response.status_code}")
 
         return response.json()
@@ -198,29 +212,18 @@ class DifyClient:
                     logger.info(f"File upload successful using endpoint: {url}")
                     result = response.json()
                     
-                    # Extract file URL from response
-                    file_url = result.get('url') or result.get('file_url') or result.get('download_url') or result.get('preview_url')
-                    if file_url:
+                    # Extract file ID from response (for local_file method)
+                    file_id = result.get('id')
+                    if file_id:
+                        logger.info(f"File uploaded successfully with ID: {file_id}")
                         return {
-                            'url': file_url,
+                            'id': file_id,
                             'type': self._get_file_type_from_filename(filename),
                             'original_response': result
                         }
                     else:
-                        # If no URL found, try to construct one from the file ID
-                        file_id = result.get('id')
-                        if file_id:
-                            # Try to construct a download URL
-                            constructed_url = f"{self.base_url}/files/{file_id}/download"
-                            logger.info(f"Constructed file URL: {constructed_url}")
-                            return {
-                                'url': constructed_url,
-                                'type': self._get_file_type_from_filename(filename),
-                                'original_response': result
-                            }
-                        else:
-                            logger.warning(f"No file URL or ID found in response: {result}")
-                            return result
+                        logger.warning(f"No file ID found in response: {result}")
+                        return result
                         
                 elif response.status_code != 404:  # Don't try next endpoint for 404
                     last_error = response
@@ -281,26 +284,53 @@ class DifyClient:
         return content_type
 
     def _get_file_type_from_filename(self, filename: str) -> str:
-        """Get Dify file type based on file extension."""
+        """Get Dify file type based on file extension according to API spec."""
         import mimetypes
         content_type, _ = mimetypes.guess_type(filename)
         
+        logger.debug(f"Determining file type for {filename}: content_type={content_type}")
+        
+        # Map to Dify API supported types (lowercase)
         if content_type:
             if content_type.startswith('image/'):
+                logger.debug(f"File type determined as: image")
                 return 'image'
             elif content_type in ['text/plain', 'text/markdown', 'application/pdf',
                                 'text/html', 'application/vnd.ms-excel',
                                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                                 'application/msword',
                                 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                                'text/csv', 'application/xml', 'application/epub+zip']:
+                                'text/csv', 'application/xml', 'application/epub+zip',
+                                'application/vnd.ms-powerpoint',
+                                'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                                'message/rfc822', 'application/vnd.ms-outlook']:
+                logger.debug(f"File type determined as: document")
                 return 'document'
             elif content_type.startswith('audio/'):
+                logger.debug(f"File type determined as: audio")
                 return 'audio'
             elif content_type.startswith('video/'):
+                logger.debug(f"File type determined as: video")
                 return 'video'
         
-        return 'document'  # Default to document type
+        # Fallback based on file extension
+        ext = filename.lower().split('.')[-1]
+        if ext in ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']:
+            logger.debug(f"File type determined as: image (by extension)")
+            return 'image'
+        elif ext in ['mp3', 'm4a', 'wav', 'webm', 'amr']:
+            logger.debug(f"File type determined as: audio (by extension)")
+            return 'audio'
+        elif ext in ['mp4', 'mov', 'mpeg', 'mpga']:
+            logger.debug(f"File type determined as: video (by extension)")
+            return 'video'
+        elif ext in ['txt', 'md', 'markdown', 'pdf', 'html', 'xlsx', 'xls', 'docx', 'csv', 
+                    'eml', 'msg', 'pptx', 'ppt', 'xml', 'epub']:
+            logger.debug(f"File type determined as: document (by extension)")
+            return 'document'
+        else:
+            logger.debug(f"File type determined as: custom (by extension)")
+            return 'custom'
 
     def get_conversations(self, user_id: str, limit: int = 20) -> Dict[str, Any]:
         """Get conversation list for a user."""
