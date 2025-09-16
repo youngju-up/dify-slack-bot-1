@@ -112,9 +112,21 @@ class SlackBot:
             # Handle file uploads if present
             files = []
             file_infos = get_file_info_from_event(event)
+            unsupported_files = []
 
             for file_info in file_infos:
                 try:
+                    # Check if file type is supported
+                    if not self._is_supported_file_type(file_info['mimetype']):
+                        unsupported_files.append(file_info['name'])
+                        logger.warning(f"Unsupported file type: {file_info['name']} ({file_info['mimetype']})")
+                        continue
+
+                    # Check file size
+                    if file_info['size'] > Config.MAX_FILE_SIZE:
+                        logger.warning(f"File too large: {file_info['name']} ({file_info['size']} bytes)")
+                        continue
+
                     file_data = self._download_slack_file(file_info['url_private'])
                     if file_data:
                         # Upload to Dify
@@ -130,8 +142,20 @@ class SlackBot:
                             "transfer_method": "local_file",
                             "upload_file_id": upload_response['id']
                         })
+                        logger.info(f"Successfully uploaded file: {file_info['name']}")
                 except Exception as e:
-                    logger.error(f"Error processing file: {e}")
+                    logger.error(f"Error processing file {file_info['name']}: {e}")
+                    # Continue processing other files even if one fails
+
+            # Notify user about unsupported files
+            if unsupported_files:
+                unsupported_list = ", ".join(unsupported_files)
+                say(f"⚠️ Some files couldn't be processed (unsupported format): {unsupported_list}", thread_ts=thread_ts)
+
+            # Check if we have any files to process
+            if file_infos and not files:
+                say("❌ None of the uploaded files could be processed. Please try with supported file formats (PDF, TXT, DOC, XLS, images, etc.)", thread_ts=thread_ts)
+                return
 
             # Send message to Dify
             if Config.RESPONSE_MODE == "streaming":
@@ -247,6 +271,12 @@ class SlackBot:
             return 'video'
         else:
             return 'custom'
+
+    def _is_supported_file_type(self, mimetype: str) -> bool:
+        """Check if the file type is supported by Dify."""
+        # Use configurable supported file types
+        supported_types = [t.strip().lower() for t in Config.SUPPORTED_FILE_TYPES]
+        return mimetype.lower() in supported_types
 
     def setup_routes(self, flask_app: Flask):
         """Set up Flask routes."""

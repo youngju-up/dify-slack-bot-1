@@ -31,6 +31,16 @@ class Config:
     REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", 30))
     DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
     CONVERSATION_CACHE_TTL = int(os.environ.get("CONVERSATION_CACHE_TTL", 3600))
+    
+    # File upload configuration
+    SUPPORTED_FILE_TYPES = os.environ.get("SUPPORTED_FILE_TYPES", 
+        "image/jpeg,image/jpg,image/png,image/gif,image/webp,"
+        "text/plain,text/markdown,application/pdf,text/html,text/csv,application/xml,"
+        "application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,"
+        "application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,"
+        "application/epub+zip,audio/mpeg,audio/wav,audio/ogg,audio/mp3,"
+        "video/mp4,video/avi,video/mov,video/wmv"
+    ).split(",")
 
     @classmethod
     def validate(cls):

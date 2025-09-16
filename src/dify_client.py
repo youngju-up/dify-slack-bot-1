@@ -173,8 +173,18 @@ class DifyClient:
             )
 
             if response.status_code != 200:
-                logger.error(f"File upload error: {response.status_code} - {response.text}")
-                raise Exception(f"File upload error: {response.status_code}")
+                error_detail = response.text
+                logger.error(f"File upload error: {response.status_code} - {error_detail}")
+                
+                # Provide more specific error messages
+                if response.status_code == 415:
+                    raise Exception(f"File type not supported by Dify API. Please try a different file format.")
+                elif response.status_code == 413:
+                    raise Exception(f"File too large. Maximum size allowed is {Config.MAX_FILE_SIZE // (1024*1024)}MB.")
+                elif response.status_code == 400:
+                    raise Exception(f"Invalid file format or corrupted file.")
+                else:
+                    raise Exception(f"File upload failed: {response.status_code} - {error_detail}")
 
             return response.json()
 
