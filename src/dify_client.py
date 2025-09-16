@@ -146,7 +146,7 @@ class DifyClient:
 
     def upload_file(self, file_content: bytes, filename: str, user_id: str) -> Dict[str, Any]:
         """
-        Upload a file to Dify.
+        Upload a file to Dify and return the file URL.
 
         Args:
             file_content: File content as bytes
@@ -154,7 +154,7 @@ class DifyClient:
             user_id: User identifier
 
         Returns:
-            File upload response with file ID
+            File upload response with file URL
         """
         # Try different possible endpoints for file upload
         possible_endpoints = [
@@ -164,9 +164,11 @@ class DifyClient:
             f"{self.base_url}/v1/upload"
         ]
         
-        # Prepare file data
-        files = {'file': (filename, file_content, self._get_content_type(filename))}
-        data = {'user': user_id}
+        # Prepare file data - use form data format as per Dify API spec
+        files = {
+            'file': (filename, file_content, self._get_content_type(filename)),
+            'user': (None, user_id)  # Include user as form field
+        }
 
         headers = {"Authorization": f"Bearer {self.api_key}"}
 
@@ -181,7 +183,6 @@ class DifyClient:
                     url,
                     headers=headers,
                     files=files,
-                    data=data,
                     timeout=self.timeout
                 )
                 
@@ -191,7 +192,20 @@ class DifyClient:
                 
                 if response.status_code == 200:
                     logger.info(f"File upload successful using endpoint: {url}")
-                    return response.json()
+                    result = response.json()
+                    
+                    # Extract file URL from response
+                    file_url = result.get('url') or result.get('file_url') or result.get('download_url')
+                    if file_url:
+                        return {
+                            'url': file_url,
+                            'type': self._get_file_type_from_filename(filename),
+                            'original_response': result
+                        }
+                    else:
+                        logger.warning(f"No file URL found in response: {result}")
+                        return result
+                        
                 elif response.status_code != 404:  # Don't try next endpoint for 404
                     last_error = response
                     logger.warning(f"File upload failed on {url}: {response.status_code} - {response.text}")
@@ -228,7 +242,49 @@ class DifyClient:
         """Get content type based on file extension."""
         import mimetypes
         content_type, _ = mimetypes.guess_type(filename)
-        return content_type or 'application/octet-stream'
+        
+        # Ensure we have a proper content type
+        if not content_type:
+            # Fallback based on file extension
+            ext = filename.lower().split('.')[-1]
+            type_mapping = {
+                'png': 'image/png',
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'gif': 'image/gif',
+                'webp': 'image/webp',
+                'pdf': 'application/pdf',
+                'txt': 'text/plain',
+                'doc': 'application/msword',
+                'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'xls': 'application/vnd.ms-excel',
+                'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            }
+            content_type = type_mapping.get(ext, 'application/octet-stream')
+        
+        return content_type
+
+    def _get_file_type_from_filename(self, filename: str) -> str:
+        """Get Dify file type based on file extension."""
+        import mimetypes
+        content_type, _ = mimetypes.guess_type(filename)
+        
+        if content_type:
+            if content_type.startswith('image/'):
+                return 'image'
+            elif content_type in ['text/plain', 'text/markdown', 'application/pdf',
+                                'text/html', 'application/vnd.ms-excel',
+                                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                'application/msword',
+                                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                'text/csv', 'application/xml', 'application/epub+zip']:
+                return 'document'
+            elif content_type.startswith('audio/'):
+                return 'audio'
+            elif content_type.startswith('video/'):
+                return 'video'
+        
+        return 'document'  # Default to document type
 
     def get_conversations(self, user_id: str, limit: int = 20) -> Dict[str, Any]:
         """Get conversation list for a user."""

@@ -86,31 +86,81 @@ def check_dify_api():
     test_content = b"Test file content for debugging"
     test_filename = "test.txt"
     
+    file_url = None
     for endpoint in working_endpoints:
         try:
-            files = {'file': (test_filename, test_content, 'text/plain')}
-            data = {'user': 'test_user'}
+            files = {
+                'file': (test_filename, test_content, 'text/plain'),
+                'user': (None, 'test_user')
+            }
             
             response = requests.post(
                 endpoint,
                 headers={"Authorization": f"Bearer {dify_api_key}"},
                 files=files,
-                data=data,
                 timeout=10
             )
             
             print(f"   {endpoint}: {response.status_code}")
             if response.status_code == 200:
                 print("   ✅ File upload successful!")
-                print(f"   Response: {response.json()}")
-                return True
+                result = response.json()
+                print(f"   Response: {result}")
+                
+                # Extract file URL
+                file_url = result.get('url') or result.get('file_url') or result.get('download_url')
+                if file_url:
+                    print(f"   File URL: {file_url}")
+                    break
+                else:
+                    print("   ⚠️ No file URL found in response")
             else:
                 print(f"   ❌ Upload failed: {response.text}")
         except Exception as e:
             print(f"   ❌ Upload error: {e}")
     
-    print("\n❌ All file upload attempts failed!")
-    return False
+    if not file_url:
+        print("\n❌ All file upload attempts failed!")
+        return False
+    
+    # Test sending message with file
+    print("\n4. Testing message with file...")
+    try:
+        message_data = {
+            "inputs": {},
+            "query": "What is this file about?",
+            "response_mode": "blocking",
+            "conversation_id": "",
+            "user": "test_user",
+            "files": [
+                {
+                    "type": "document",
+                    "transfer_method": "remote_url",
+                    "url": file_url
+                }
+            ]
+        }
+        
+        response = requests.post(
+            f"{dify_base_url}/chat-messages",
+            headers=headers,
+            json=message_data,
+            timeout=30
+        )
+        
+        print(f"   Message with file: {response.status_code}")
+        if response.status_code == 200:
+            print("   ✅ Message with file successful!")
+            result = response.json()
+            print(f"   Answer: {result.get('answer', 'No answer')[:200]}...")
+            return True
+        else:
+            print(f"   ❌ Message failed: {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"   ❌ Message error: {e}")
+        return False
 
 if __name__ == "__main__":
     print("🚀 Dify API Debug Tool")

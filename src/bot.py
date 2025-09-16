@@ -143,13 +143,17 @@ class SlackBot:
                             user_id
                         )
 
-                        # Add to files list for message
-                        files.append({
-                            "type": self._get_file_type(file_info['mimetype']),
-                            "transfer_method": "local_file",
-                            "upload_file_id": upload_response['id']
-                        })
-                        logger.info(f"Successfully uploaded file: {file_info['name']}")
+                        # Add to files list for message using remote_url method
+                        if 'url' in upload_response:
+                            files.append({
+                                "type": upload_response.get('type', self._get_file_type(file_info['mimetype'])),
+                                "transfer_method": "remote_url",
+                                "url": upload_response['url']
+                            })
+                            logger.info(f"Successfully uploaded file: {file_info['name']} -> {upload_response['url']}")
+                        else:
+                            logger.error(f"No URL returned for file: {file_info['name']}")
+                            logger.debug(f"Upload response: {upload_response}")
                 except Exception as e:
                     logger.error(f"Error processing file {file_info['name']}: {e}")
                     # Continue processing other files even if one fails
