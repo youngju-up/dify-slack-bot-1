@@ -66,7 +66,7 @@ def main():
     if Config.DEBUG:
         # Development server
         app.run(
-            host='127.0.0.1',
+            host='0.0.0.0',
             port=Config.FLASK_PORT,
             debug=True,
             use_reloader=False  # Disable reloader to avoid duplicate initialization
@@ -75,7 +75,7 @@ def main():
         # Production server (use gunicorn or similar in production)
         # For now, use Flask's built-in server with threading
         app.run(
-            host='127.0.0.1',
+            host='0.0.0.0',
             port=Config.FLASK_PORT,
             debug=False,
             threaded=True
