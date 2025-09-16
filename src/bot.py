@@ -114,6 +114,13 @@ class SlackBot:
             file_infos = get_file_info_from_event(event)
             unsupported_files = []
 
+            # Check if Dify supports file uploads
+            if file_infos and not hasattr(self, '_file_upload_checked'):
+                if not self.dify.check_file_upload_support():
+                    say("⚠️ File uploads are not supported by the current Dify API configuration. Please contact your administrator.", thread_ts=thread_ts)
+                    return
+                self._file_upload_checked = True
+
             for file_info in file_infos:
                 try:
                     # Check if file type is supported
@@ -154,7 +161,7 @@ class SlackBot:
 
             # Check if we have any files to process
             if file_infos and not files:
-                say("❌ None of the uploaded files could be processed. Please try with supported file formats (PDF, TXT, DOC, XLS, images, etc.)", thread_ts=thread_ts)
+                say("❌ None of the uploaded files could be processed. This might be due to:\n• Unsupported file formats\n• File size too large\n• Dify API configuration issues\n\nPlease try with supported file formats (PDF, TXT, DOC, XLS, images, etc.) or contact your administrator.", thread_ts=thread_ts)
                 return
 
             # Send message to Dify

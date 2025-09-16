@@ -156,41 +156,79 @@ class DifyClient:
         Returns:
             File upload response with file ID
         """
-        url = f"{self.base_url}/files/upload"
-
-        files = {'file': (filename, file_content)}
+        # Try different possible endpoints for file upload
+        possible_endpoints = [
+            f"{self.base_url}/files/upload",
+            f"{self.base_url}/upload",
+            f"{self.base_url}/v1/files/upload",
+            f"{self.base_url}/v1/upload"
+        ]
+        
+        # Prepare file data
+        files = {'file': (filename, file_content, self._get_content_type(filename))}
         data = {'user': user_id}
 
         headers = {"Authorization": f"Bearer {self.api_key}"}
 
-        try:
-            response = requests.post(
-                url,
-                headers=headers,
-                files=files,
-                data=data,
-                timeout=self.timeout
-            )
-
-            if response.status_code != 200:
-                error_detail = response.text
-                logger.error(f"File upload error: {response.status_code} - {error_detail}")
+        # Try each endpoint until one works
+        last_error = None
+        for url in possible_endpoints:
+            try:
+                logger.info(f"Trying file upload endpoint: {url}")
+                logger.debug(f"File details: {filename}, size: {len(file_content)} bytes, user: {user_id}")
                 
-                # Provide more specific error messages
-                if response.status_code == 415:
-                    raise Exception(f"File type not supported by Dify API. Please try a different file format.")
-                elif response.status_code == 413:
-                    raise Exception(f"File too large. Maximum size allowed is {Config.MAX_FILE_SIZE // (1024*1024)}MB.")
-                elif response.status_code == 400:
-                    raise Exception(f"Invalid file format or corrupted file.")
-                else:
-                    raise Exception(f"File upload failed: {response.status_code} - {error_detail}")
+                response = requests.post(
+                    url,
+                    headers=headers,
+                    files=files,
+                    data=data,
+                    timeout=self.timeout
+                )
+                
+                logger.debug(f"Response status: {response.status_code}")
+                logger.debug(f"Response headers: {dict(response.headers)}")
+                logger.debug(f"Response body: {response.text[:500]}...")
+                
+                if response.status_code == 200:
+                    logger.info(f"File upload successful using endpoint: {url}")
+                    return response.json()
+                elif response.status_code != 404:  # Don't try next endpoint for 404
+                    last_error = response
+                    logger.warning(f"File upload failed on {url}: {response.status_code} - {response.text}")
+                    
+            except Exception as e:
+                logger.warning(f"Exception trying endpoint {url}: {e}")
+                last_error = e
+                continue
+        
+        # If all endpoints failed, use the last error
+        if last_error and hasattr(last_error, 'status_code'):
+            response = last_error
+        else:
+            raise Exception("All file upload endpoints failed")
 
-            return response.json()
+        # Handle the final error
+        if response.status_code != 200:
+            error_detail = response.text
+            logger.error(f"File upload error: {response.status_code} - {error_detail}")
+            
+            # Provide more specific error messages
+            if response.status_code == 415:
+                raise Exception(f"File type not supported by Dify API. Please try a different file format.")
+            elif response.status_code == 413:
+                raise Exception(f"File too large. Maximum size allowed is {Config.MAX_FILE_SIZE // (1024*1024)}MB.")
+            elif response.status_code == 400:
+                raise Exception(f"Invalid file format or corrupted file.")
+            else:
+                raise Exception(f"File upload failed: {response.status_code} - {error_detail}")
 
-        except Exception as e:
-            logger.error(f"Error uploading file: {e}")
-            raise
+        return response.json()
+
+    def _get_content_type(self, filename: str) -> str:
+        """Get content type based on file extension."""
+        import mimetypes
+        content_type, _ = mimetypes.guess_type(filename)
+        return content_type or 'application/octet-stream'
 
     def get_conversations(self, user_id: str, limit: int = 20) -> Dict[str, Any]:
         """Get conversation list for a user."""
@@ -373,3 +411,36 @@ class DifyClient:
         except Exception as e:
             logger.error(f"Error getting parameters: {e}")
             raise
+
+    def check_file_upload_support(self) -> bool:
+        """Check if the Dify API supports file uploads."""
+        try:
+            # Try to get app info to check if file upload is supported
+            app_info = self.get_app_info()
+            
+            # Check if the app has file upload capabilities
+            # This is a basic check - the actual implementation depends on Dify's API structure
+            logger.info("Checking file upload support...")
+            
+            # Try a simple HEAD request to the upload endpoint
+            test_endpoints = [
+                f"{self.base_url}/files/upload",
+                f"{self.base_url}/upload",
+                f"{self.base_url}/v1/files/upload"
+            ]
+            
+            for endpoint in test_endpoints:
+                try:
+                    response = requests.head(endpoint, headers=self.headers, timeout=5)
+                    if response.status_code in [200, 405]:  # 405 means method not allowed but endpoint exists
+                        logger.info(f"File upload endpoint exists: {endpoint}")
+                        return True
+                except:
+                    continue
+                    
+            logger.warning("No file upload endpoints found")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking file upload support: {e}")
+            return False
